@@ -1,0 +1,12 @@
+# Reference questions with expected answers, checked on every change (see test_explain.py).
+# Expected numbers are computed by hand from the fixture data in conftest.py, not by the code under test.
+- question: How many people are exposed under the 100-year flood?
+  scenario_id: rp100
+  expect_numbers: ["1,606,800"]          # 416,000 + 1,170,000 + 20,800
+- question: What share of the population is exposed in the 50-year flood?
+  scenario_id: rp50
+  expect_numbers: ["1,236,000", "19.9%"]
+- question: How much does exposure change from the 50-year to the 100-year flood?
+  scenario_id: rp100
+  compare_to: rp50
+  expect_numbers: ["370,800", "30.0%"]   # 1,606,800 - 1,236,000; 370,800 / 1,236,000

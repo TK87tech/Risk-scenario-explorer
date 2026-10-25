@@ -1,0 +1,63 @@
+{
+  "realm": "grp-demo",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 900,
+  "roles": {
+    "realm": [
+      {"name": "viewer", "description": "Can sign in and ask for explanations"},
+      {"name": "analyst", "description": "Can also download results"}
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "grp-web",
+      "name": "Risk Scenario Explorer (browser)",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": ["http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "grp-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "grp-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "viewer",
+      "enabled": true,
+      "email": "viewer@example.org",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Viewer",
+      "credentials": [{"type": "password", "value": "viewer", "temporary": false}],
+      "realmRoles": ["viewer"]
+    },
+    {
+      "username": "analyst",
+      "enabled": true,
+      "email": "analyst@example.org",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Analyst",
+      "credentials": [{"type": "password", "value": "analyst", "temporary": false}],
+      "realmRoles": ["viewer", "analyst"]
+    }
+  ]
+}

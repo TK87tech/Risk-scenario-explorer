@@ -1,0 +1,46 @@
+# Flood scenarios and ILLUSTRATIVE hazard parameters.
+#
+# These numbers demonstrate the platform pattern (deterministic calculation -> API -> MCP -> UI/LLM).
+# They are NOT a real flood hazard assessment. In production, `flood_share` would come from a hazard
+# model or dataset (e.g. JRC Global Flood Hazard Maps) via a zonal-statistics job.
+
+scenarios:
+  - id: rp10
+    name: 10-year flood
+    description: A flood with a 10% chance of happening in any year, under current climate.
+    multiplier: 0.5
+  - id: rp50
+    name: 50-year flood
+    description: A flood with a 2% chance of happening in any year, under current climate.
+    multiplier: 1.0
+  - id: rp100
+    name: 100-year flood
+    description: A flood with a 1% chance of happening in any year, under current climate.
+    multiplier: 1.3
+  - id: rp100_2050
+    name: 100-year flood, 2050 high-emissions
+    description: The 100-year flood under an illustrative 2050 high-emissions (SSP5-8.5-like) climate uplift.
+    multiplier: 1.6
+
+# Base share of each province's population living in flood-prone areas for the 50-year flood (illustrative).
+# Provinces not listed get a default derived deterministically from their name (see api/app/seed.py),
+# bounded to [default_min, default_max]. Listed provinces are lowland Chao Phraya / Mun-Chi basin provinces
+# hit hard in past floods (e.g. 2011), set higher to keep the demo plausible.
+default_min: 0.02
+default_max: 0.14
+max_share: 0.9
+base_share:
+  Phra Nakhon Si Ayutthaya: 0.42
+  Pathum Thani: 0.36
+  Nonthaburi: 0.30
+  Ang Thong: 0.34
+  Sing Buri: 0.31
+  Chai Nat: 0.27
+  Nakhon Sawan: 0.25
+  Suphan Buri: 0.22
+  Lopburi: 0.20
+  Bangkok: 0.18
+  Samut Prakan: 0.20
+  Ubon Ratchathani: 0.21
+  Phichit: 0.19
+  Sukhothai: 0.18
