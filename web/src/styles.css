@@ -79,3 +79,8 @@ tr.selected { background: #fff6dc; }
   .layout { grid-template-columns: 1fr; }
   .content { grid-template-rows: 340px auto; }
 }
+
+.banner { margin: 0.8rem 1rem 0; padding: 0.7rem 1rem; background: #fff6dc; border: 1px solid #f0d58c; border-radius: 8px; font-size: 0.9rem; }
+.banner code { background: rgba(0,0,0,0.06); padding: 0 0.3rem; border-radius: 4px; }
+a.button { display: inline-block; padding: 0.45rem 0.9rem; border-radius: 6px; border: 1px solid var(--border); color: var(--text); text-decoration: none; background: var(--surface); }
+a.button:hover { border-color: var(--accent); color: var(--accent); }

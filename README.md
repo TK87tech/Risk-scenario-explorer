@@ -5,6 +5,9 @@ ask an AI to explain the results, and download them. Built to demonstrate one ar
 
 > **Calculated results come from one deterministic service. The language model may explain them, never produce them.**
 
+**Live demo:** https://tk87tech.github.io/Risk-scenario-explorer/ (static snapshot: map, comparison, explanations, downloads).
+The full stack below adds OIDC sign-in, role-based access, AI explanations and the MCP server.
+
 ![Risk Scenario Explorer: 2050 high-emissions 100-year flood compared with today's 100-year flood](docs/screenshot.png)
 
 | | |
@@ -80,6 +83,16 @@ claude mcp add risk-explorer -e API_BASE_URL=http://localhost:8000 -- python mcp
 ```
 
 Tools: `list_scenarios`, `get_scenario_summary`, `get_province_result`, `compare_scenarios`.
+
+## Static demo (GitHub Pages)
+
+`.github/workflows/pages.yml` builds the frontend with `VITE_STATIC_DATA=true`, so it reads a snapshot in
+`web/public/data/` instead of calling the API. Regenerate the snapshot after changing data or calculations:
+
+```bash
+docker compose up -d db api
+cd api && python ../scripts/export_static.py
+```
 
 ## Tests
 

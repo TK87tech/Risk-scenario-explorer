@@ -2,6 +2,17 @@
 
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+// Static mode (GitHub Pages): read a snapshot exported from the API by scripts/export_static.py instead of calling it.
+export const STATIC = import.meta.env.VITE_STATIC_DATA === "true";
+export const REPO_URL = "https://github.com/TK87tech/Risk-scenario-explorer";
+const DATA_URL = `${import.meta.env.BASE_URL}data`;
+
+async function staticJson<T>(file: string): Promise<T> {
+  const res = await fetch(`${DATA_URL}/${file}`);
+  if (!res.ok) throw new ApiError(res.status, `Could not load ${file}`);
+  return res.json() as Promise<T>;
+}
+
 export type RiskClass = "low" | "moderate" | "high" | "very high";
 
 export interface Scenario { id: string; name: string; description: string }
@@ -72,11 +83,20 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
 }
 
 export const api = {
-  scenarios: () => request<Scenario[]>("/api/scenarios"),
-  provinces: () => request<GeoJSON.FeatureCollection>("/api/provinces"),
-  results: (id: string) => request<Results>(`/api/scenarios/${encodeURIComponent(id)}/results`),
+  scenarios: () => (STATIC ? staticJson<Scenario[]>("scenarios.json") : request<Scenario[]>("/api/scenarios")),
+  provinces: () =>
+    STATIC ? staticJson<GeoJSON.FeatureCollection>("provinces.json") : request<GeoJSON.FeatureCollection>("/api/provinces"),
+  results: (id: string) =>
+    STATIC ? staticJson<Results>(`results_${id}.json`) : request<Results>(`/api/scenarios/${encodeURIComponent(id)}/results`),
   compare: (base: string, target: string) =>
-    request<Comparison>(`/api/compare?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`),
+    STATIC
+      ? staticJson<Comparison>(`compare_${base}__${target}.json`)
+      : request<Comparison>(`/api/compare?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`),
+  /** Static mode only: the deterministic explanation exported for this scenario (and comparison). */
+  staticExplanation: async (scenarioId: string, compareTo?: string) => {
+    const all = await staticJson<Record<string, string>>("explanations.json");
+    return all[compareTo ? `${scenarioId}|${compareTo}` : scenarioId];
+  },
   explain: (token: string, body: { scenario_id: string; compare_to?: string; question: string }) =>
     request<Explanation>("/api/explain", { method: "POST", body: JSON.stringify(body) }, token),
   async download(token: string, id: string, format: "csv" | "geojson"): Promise<void> {
@@ -84,9 +104,28 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new ApiError(res.status, res.status === 403 ? "Downloads need the analyst role." : res.statusText);
-    const url = URL.createObjectURL(await res.blob());
-    const a = Object.assign(document.createElement("a"), { href: url, download: `${id}_results.${format}` });
-    a.click();
-    URL.revokeObjectURL(url);
+    saveFile(await res.blob(), `${id}_results.${format}`);
+  },
+  /** Static mode only: build the same CSV/GeoJSON the API's download endpoint returns, in the browser. */
+  staticDownload(results: Results, provinces: GeoJSON.FeatureCollection, format: "csv" | "geojson"): void {
+    const id = results.scenario.id;
+    if (format === "csv") {
+      const cols = ["province", "population", "exposed_population", "exposed_share_pct", "risk_class"] as const;
+      const lines = [cols.join(","), ...results.provinces.map((p) => cols.map((c) => p[c]).join(","))];
+      saveFile(new Blob([lines.join("\n") + "\n"], { type: "text/csv" }), `${id}_results.csv`);
+      return;
+    }
+    const byName = Object.fromEntries(results.provinces.map((p) => [p.province, p]));
+    const merged = {
+      ...provinces,
+      features: provinces.features.map((f) => ({ ...f, properties: { ...f.properties, ...byName[f.properties?.province] } })),
+    };
+    saveFile(new Blob([JSON.stringify(merged)], { type: "application/geo+json" }), `${id}_results.geojson`);
   },
 };
+
+function saveFile(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  Object.assign(document.createElement("a"), { href: url, download: filename }).click();
+  URL.revokeObjectURL(url);
+}

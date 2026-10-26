@@ -1,6 +1,6 @@
 import type { User } from "oidc-client-ts";
 import { useEffect, useMemo, useState } from "react";
-import { api, ApiError, type Comparison, type Explanation, type Results, type RiskClass, type Scenario } from "./api";
+import { api, ApiError, REPO_URL, STATIC, type Comparison, type Explanation, type Results, type RiskClass, type Scenario } from "./api";
 import { initAuth, rolesOf, userManager } from "./auth";
 import { fmt, RISK_COLORS, RISK_ORDER, signed } from "./format";
 import { MapView } from "./MapView";
@@ -20,7 +20,7 @@ export default function App() {
   const isAnalyst = roles.includes("analyst");
 
   useEffect(() => {
-    initAuth().then(setUser).catch(() => setUser(null));
+    if (!STATIC) initAuth().then(setUser).catch(() => setUser(null));
     api.scenarios().then(setScenarios).catch((e) => setError(e.message));
     api.provinces().then(setProvinces).catch((e) => setError(e.message));
   }, []);
@@ -47,7 +47,9 @@ export default function App() {
           <p className="subtitle">Flood exposure for Thailand's provinces · illustrative hazard data, real boundaries and population</p>
         </div>
         <div className="account">
-          {user ? (
+          {STATIC ? (
+            <a className="button" href={REPO_URL}>View source on GitHub</a>
+          ) : user ? (
             <>
               <span>
                 Signed in as <strong>{user.profile.preferred_username}</strong> ({roles.filter((r) => r === "viewer" || r === "analyst").join(", ")})
@@ -59,6 +61,14 @@ export default function App() {
           )}
         </div>
       </header>
+
+      {STATIC && (
+        <p className="banner">
+          <strong>Static demo.</strong> Results are a snapshot exported from the API. OIDC sign-in, role-based downloads,
+          AI explanations and the MCP server run in the full stack: see the <a href={REPO_URL}>README</a> to start it
+          with <code>docker compose up</code>.
+        </p>
+      )}
 
       {error && <p role="alert" className="error">{error}</p>}
 
@@ -82,16 +92,21 @@ export default function App() {
 
           <Legend counts={results?.summary.provinces_by_risk_class} />
 
-          <ExplainBox user={user} scenarioId={scenarioId} compareTo={compareTo || undefined} />
+          {STATIC
+            ? <StaticExplainBox scenarioId={scenarioId} compareTo={compareTo || undefined} />
+            : <ExplainBox user={user} scenarioId={scenarioId} compareTo={compareTo || undefined} />}
 
           <section aria-labelledby="downloads">
             <h2 id="downloads">Downloads</h2>
-            {!user && <p className="hint">Sign in with an analyst account to download results.</p>}
-            {user && !isAnalyst && <p className="hint">Your account can view and ask questions; downloads need the analyst role.</p>}
+            {STATIC && <p className="hint">In the full stack, downloads require signing in with the analyst role.</p>}
+            {!STATIC && !user && <p className="hint">Sign in with an analyst account to download results.</p>}
+            {!STATIC && user && !isAnalyst && <p className="hint">Your account can view and ask questions; downloads need the analyst role.</p>}
             <div className="row">
               {(["csv", "geojson"] as const).map((f) => (
-                <button key={f} disabled={!isAnalyst}
-                  onClick={() => api.download(user!.access_token, scenarioId, f).catch((e: ApiError) => setError(e.message))}>
+                <button key={f} disabled={STATIC ? !results || !provinces : !isAnalyst}
+                  onClick={() => STATIC
+                    ? api.staticDownload(results!, provinces!, f)
+                    : api.download(user!.access_token, scenarioId, f).catch((e: ApiError) => setError(e.message))}>
                   Download {f.toUpperCase()}
                 </button>
               ))}
@@ -144,6 +159,28 @@ function Legend({ counts }: { counts?: Record<RiskClass, number> }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+function StaticExplainBox({ scenarioId, compareTo }: { scenarioId: string; compareTo?: string }) {
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => setText(null), [scenarioId, compareTo]);
+  return (
+    <section aria-labelledby="explain">
+      <h2 id="explain">Explain these results</h2>
+      <button className="primary" onClick={() => api.staticExplanation(scenarioId, compareTo).then(setText)}>Explain</button>
+      <div aria-live="polite">
+        {text && (
+          <div className="answer" data-testid="answer">
+            <p>{text}</p>
+            <p className="hint">
+              Deterministic explanation generated from the calculated results. In the full stack you can ask your own
+              question: an LLM answers through tool calls, and a guard rejects any number the tools did not return.
+            </p>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
