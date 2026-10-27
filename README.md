@@ -57,10 +57,10 @@ flowchart LR
 
 ## Run it
 
-Requirements: Docker. Optional: an Anthropic API key for AI explanations.
+Requirements: Docker. Optional: an Anthropic or OpenRouter API key for AI explanations (OpenRouter has free models).
 
 ```bash
-cp .env.example .env            # optional: add ANTHROPIC_API_KEY
+cp .env.example .env            # optional: add ANTHROPIC_API_KEY, or set LLM_PROVIDER=openrouter + OPENROUTER_API_KEY
 docker compose up --build
 ```
 
@@ -97,7 +97,7 @@ cd api && python ../scripts/export_static.py
 ## Tests
 
 ```bash
-cd api && pip install -r requirements.txt && pytest          # 21 tests, no database or API key needed
+cd api && pip install -r requirements.txt && pytest          # 25 tests, no database or API key needed
 cd web && npm ci && npm test && npm run build                 # unit tests, type-check, production build
 python scripts/oidc_smoke_test.py                             # real OIDC sign-in against the running stack
 cd e2e && npm install && npx playwright install chromium && npx playwright test   # browser E2E

@@ -68,6 +68,62 @@ def test_llm_answer_with_invented_number_falls_back(fake_repo):
     assert "1,606,800" in result["answer"]
 
 
+def test_provider_error_falls_back_to_template(fake_repo):
+    def failing_client():
+        raise RuntimeError("429 Too Many Requests")
+
+    result = ex.explain(None, "rp100", "How many people are exposed?", client_factory=failing_client)
+    assert result["mode"] == "template"
+    assert "1,606,800" in result["answer"]
+
+
+# ---------- OpenRouter (OpenAI-compatible chat completions) ----------
+
+@pytest.fixture
+def openrouter(monkeypatch):
+    settings = ex.get_settings().model_copy(update={"llm_provider": "openrouter"})
+    monkeypatch.setattr(ex, "get_settings", lambda: settings)
+
+
+class FakeChat:
+    """Plays back OpenRouter responses: first a tool call, then a final text answer."""
+
+    def __init__(self, final_text: str):
+        self.payloads = []
+        self.final_text = final_text
+
+    def __call__(self, payload):
+        self.payloads.append(payload)
+        if len(self.payloads) == 1:
+            call = {"id": "c1", "type": "function",
+                    "function": {"name": "get_scenario_summary", "arguments": '{"scenario_id": "rp100"}'}}
+            return {"choices": [{"finish_reason": "tool_calls", "message": {"content": None, "tool_calls": [call]}}]}
+        return {"choices": [{"finish_reason": "stop", "message": {"content": self.final_text}}]}
+
+
+def test_openrouter_answer_grounded_in_tools_passes(fake_repo, openrouter):
+    chat = FakeChat("Under the 100-year flood, 1,606,800 of 6,200,000 people (25.9%) are exposed.")
+    result = ex.explain(None, "rp100", "How many people are exposed?", client_factory=lambda: chat)
+    assert result["mode"] == "llm"
+    assert result["tools_used"] == ["get_scenario_summary"]
+    assert chat.payloads[0]["tools"][0]["function"]["name"] == "get_scenario_summary"
+    assert chat.payloads[1]["messages"][-1] == {"role": "tool", "tool_call_id": "c1", "content": ex.json.dumps(
+        ex.run_tool(None, "get_scenario_summary", {"scenario_id": "rp100"}), default=str)}
+
+
+def test_scenario_names_count_as_evidence(fake_repo):
+    client = FakeClient("Under the 50-year flood, 1,606,800 people (25.9%) are exposed.")
+    result = ex.explain(None, "rp50", "How many people are exposed?", client_factory=lambda: client)
+    assert result["mode"] == "llm"
+
+
+def test_openrouter_answer_with_invented_number_falls_back(fake_repo, openrouter):
+    result = ex.explain(None, "rp100", "How many people are exposed?",
+                        client_factory=lambda: FakeChat("Roughly 1.7 million people are exposed."))
+    assert result["mode"] == "template"
+    assert result["guard"]["unsupported_numbers"] == ["1.7"]
+
+
 def test_unknown_province_is_reported_not_invented(fake_repo):
     out = ex.run_tool(None, "get_province_result", {"scenario_id": "rp50", "province": "Atlantis"})
     assert "error" in out and "Bangkok" in out["provinces"]

@@ -39,8 +39,11 @@ services:
       OIDC_ISSUER: http://localhost:8081/realms/grp-demo
       OIDC_JWKS_URL: http://keycloak:8080/realms/grp-demo/protocol/openid-connect/certs
       OIDC_AUDIENCE: grp-api
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-claude-opus-5}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-nvidia/nemotron-3-ultra-550b-a55b:free}
       CORS_ORIGINS: '["http://localhost:5173"]'
     ports: ["8000:8000"]
     volumes: ["./data:/data:ro"]

@@ -30,6 +30,8 @@ jobs:
         env:
           VITE_STATIC_DATA: "true"
           VITE_BASE: /${{ github.event.repository.name }}/
+          # Repository variable, e.g. https://<code>.goatcounter.com/count; empty = no visitor counting
+          VITE_GOATCOUNTER_URL: ${{ vars.GOATCOUNTER_URL }}
       - uses: actions/upload-pages-artifact@v4
         with: {path: web/dist}
 

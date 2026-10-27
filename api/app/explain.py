@@ -2,11 +2,12 @@
 
 The language model explains results; it never produces them. It can only see numbers by calling tools that run the
 deterministic functions in risk.py, and every number in its answer is checked against those tool outputs. An answer
-with an unsupported number is replaced by a deterministic template explanation. Without an API key, the template
-is used directly.
+with an unsupported number is replaced by a deterministic template explanation. Without an API key, or when the
+provider fails, the template is used directly.
 """
 
 import json
+import logging
 import re
 from collections.abc import Callable
 
@@ -14,6 +15,8 @@ from sqlalchemy import Connection
 
 from app import repository, risk
 from app.config import get_settings
+
+log = logging.getLogger("grp.explain")
 
 MAX_TOOL_ROUNDS = 6
 
@@ -25,7 +28,8 @@ Rules:
   Do not write "about", "roughly" or "million"-style approximations.
 - If the tools cannot answer the question, say so plainly.
 - The hazard data is illustrative, for demonstration only; mention this if the user asks about real-world risk.
-- Answer in 2-5 short sentences of plain English."""
+- Answer in 2-5 short sentences of plain English, as plain text: no Markdown, bold, headings or lists.
+- Refer to scenarios by their names (e.g. "100-year flood, 2050 high-emissions"), not their ids."""
 
 TOOLS = [
     {
@@ -157,17 +161,74 @@ def _llm_answer(conn: Connection, question: str, context: str, evidence: list[st
     return None
 
 
+# The same tools in the OpenAI function-calling format that OpenRouter uses.
+OPENAI_TOOLS = [
+    {"type": "function", "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]}}
+    for t in TOOLS
+]
+
+
+def _openrouter_answer(conn: Connection, question: str, context: str, evidence: list[str],
+                       tools_used: list[str], client_factory: Callable | None = None) -> str | None:
+    """Same tool loop as _llm_answer, over OpenRouter's OpenAI-compatible chat completions API.
+
+    The client is a callable taking a request payload and returning the response JSON."""
+    settings = get_settings()
+    if client_factory is None:
+        import httpx
+
+        http = httpx.Client(base_url=settings.openrouter_base_url, timeout=60, headers={
+            "Authorization": f"Bearer {settings.openrouter_api_key}", "X-Title": "Risk Scenario Explorer"})
+
+        def chat(payload: dict) -> dict:
+            response = http.post("/chat/completions", json=payload)
+            response.raise_for_status()
+            return response.json()
+    else:
+        chat = client_factory()
+    messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": f"{context}\n\nQuestion: {question}"}]
+    for _ in range(MAX_TOOL_ROUNDS):
+        choice = chat({"model": settings.openrouter_model, "max_tokens": 2000, "messages": messages,
+                       "tools": OPENAI_TOOLS})["choices"][0]
+        message = choice["message"]
+        calls = message.get("tool_calls") or []
+        if not calls:
+            if choice.get("finish_reason") == "length":
+                return None
+            return (message.get("content") or "").strip() or None
+        messages.append({"role": "assistant", "content": message.get("content") or "", "tool_calls": calls})
+        for call in calls:
+            name = call["function"]["name"]
+            output = json.dumps(run_tool(conn, name, json.loads(call["function"].get("arguments") or "{}")), default=str)
+            evidence.append(output)
+            tools_used.append(name)
+            messages.append({"role": "tool", "tool_call_id": call["id"], "content": output})
+    return None
+
+
+def _provider(client_factory: Callable | None):
+    """The configured LLM backend, or None when it has neither an API key nor a test client (template only)."""
+    settings = get_settings()
+    if settings.llm_provider == "openrouter":
+        return _openrouter_answer if settings.openrouter_api_key or client_factory else None
+    return _llm_answer if settings.anthropic_api_key or client_factory else None
+
+
 def explain(conn: Connection, scenario_id: str, question: str, compare_to: str | None = None,
             client_factory: Callable | None = None) -> dict:
-    repository.get_scenario(conn, scenario_id)  # 404 early for unknown scenarios
-    if compare_to:
-        repository.get_scenario(conn, compare_to)
+    # 404 early for unknown scenarios. Their names ("50-year flood") count as evidence: the model is told to use them.
+    names = [repository.get_scenario(conn, s)["name"] for s in (scenario_id, compare_to) if s]
     context = f"The user is viewing scenario '{scenario_id}'" + (f", compared with '{compare_to}'." if compare_to else ".")
-    evidence, tools_used = [question], []
+    evidence, tools_used = [question, *names], []
 
     answer = None
-    if get_settings().anthropic_api_key or client_factory:
-        answer = _llm_answer(conn, question, context, evidence, tools_used, client_factory)
+    provider = _provider(client_factory)
+    if provider:
+        try:
+            answer = provider(conn, question, context, evidence, tools_used, client_factory)
+        except Exception:  # rate limits, outages, malformed tool calls: explain with the template instead
+            log.exception("LLM provider failed; using template explanation")
+            answer = None
 
     if answer:
         bad = unsupported_numbers(answer, evidence)

@@ -15,8 +15,13 @@ class Settings(BaseSettings):
     oidc_audience: str = "grp-api"
 
     # Bounded LLM explanations. Without an API key the API falls back to deterministic template explanations.
+    # llm_provider picks the backend: "anthropic" (Claude) or "openrouter" (any OpenRouter model with tool calling).
+    llm_provider: str = "anthropic"
     anthropic_api_key: str | None = None
     llm_model: str = "claude-opus-5"
+    openrouter_api_key: str | None = None
+    openrouter_model: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
